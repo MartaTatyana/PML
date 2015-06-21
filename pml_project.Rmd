@@ -1,0 +1,110 @@
+##Machine learning project"
+
+###Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways
+
+###Downloading data for hte project
+
+```{r download and read data, cache=TRUE}
+download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",
+              "train_set.csv",mode="wb")
+download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",
+              "test_set.csv", mode="wb")
+
+train_set <- read.csv("train_set.csv",na.strings=c("NA","#DIV/0!", ""), row.names = 1)
+test_set <- read.csv("test_set.csv",na.strings=c("NA","#DIV/0!", ""), row.names = 1)
+
+dim(train_set)
+dim(test_set)
+
+table(train_set$classe)
+```
+
+###Data Processing
+
+First round of data processing will include cleaning data.
+
+```{r,warning=FALSE}
+##check for NAs
+nasPerColumn <- apply(train_set, 2, function(x) length(which(is.na(x))))
+nasPerColumn
+
+##remove columns that contain mostly NA values (90%)
+train_set <- train_set[,which(nasPerColumn <  nrow(train_set)*0.9)]
+
+library(caret)
+##remove near zero values
+nearZeroColumns <- nearZeroVar(train_set, saveMetrics = TRUE)
+train_set <- train_set[, nearZeroColumns$nzv==FALSE]
+
+##subset the taining set to only predictor columns
+train_set   <-train_set[,-c(1:7)]
+test_set <-test_set[,-c(1:7)]
+
+##Classe as factor
+train_set$classe <- factor(train_set$classe)
+```
+
+Now let's do preprocessing for the model training
+
+```{r, warning=FALSE}
+library(caret)
+set.seed(23232)
+inTrain <- createDataPartition(train_set$classe, p=0.75, list = FALSE)
+train <- train_set[inTrain,]
+test <- train_set[-inTrain,]
+```
+
+###Model Training and validation
+
+First, we will build descision tree model.
+
+```{r, warning=FALSE}
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+
+firstmodel <- rpart(classe ~ ., data=train, method="class")
+prediction <- predict(firstmodel, test, type = "class")
+rpart.plot(firstmodel, main="Classification Tree")
+
+##review confusin matrix
+confusionMatrix(prediction, test$classe)
+```
+
+Now we will build random forest model.
+
+```{r}
+scondmodel <- randomForest(classe ~ ., data=train, method="class")
+prediction <- predict(scondmodel, test, type = "class")
+
+##review confusin matrix
+confusionMatrix(prediction, test$classe)
+```
+
+We see that reandom forest model accuracy is better then the decision tree model accuracy, so we should be using that model to predict results for the test_set file.
+
+###Test Set predictions
+
+```{r}
+test_predictions <- predict(scondmodel, test_set, type="class")
+
+##the list of answers
+test_predictions
+```
+
+Creating submission files.
+
+```{r}
+# Write files for submission
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(test_predictions)
+```
